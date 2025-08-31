@@ -4,7 +4,10 @@ const { UserModel, TodoModel } = require("./db");
 const { default: mongoose } = require("mongoose");
 const jwt = require("jsonwebtoken");
 const app = express();
+const { z } = require("zod");
 app.use(express.json());
+
+const bcrypt = require("bcrypt");
 
 const PORT = process.env.PORT;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -18,26 +21,44 @@ mongoose
   .catch((err) => console.error("Connection Error", err));
 
 app.post("/signup", async function (req, res) {
+  const mySchema = z.object({
+    username: z.string(),
+    email: z.string().min(3).max(100).email(),
+    password: z.string(),
+  });
+
+  const parseData = mySchema.safeParse(req.body);
+
+  if (!parseData.success) {
+    res.json({
+      message: "Incorrect format",
+    });
+
+    return;
+  }
+
   const username = req.body.username;
   const password = req.body.password;
   const email = req.body.email;
 
-  await UserModel.create({ username, password, email });
+  const hashedPassword = await bcrypt.hash(password, 5);
+
+  await UserModel.create({ username, password: hashedPassword, email });
 
   res.send({
-    message: "User signed In",
+    message: "User signed up",
   });
 });
 app.post("/signin", async function (req, res) {
   const username = req.body.username;
   const password = req.body.password;
 
-  const user = await UserModel.findOne({
+  let user = await UserModel.findOne({
     username: username,
-    password: password,
   });
-  ``;
-  if (user) {
+
+  const PasswordMatched = await bcrypt.compare(password, user.password);
+  if (PasswordMatched) {
     const token = jwt.sign({ id: user._id }, JWT_SECRET);
     res.send({
       token,
